@@ -36,6 +36,7 @@
             pkgs.automake
             pkgs.libtool
             pkgs.pkg-config
+            pkgs.patchelf
             # postgres
             pkgs.readline
             pkgs.zlib
@@ -52,6 +53,8 @@
             pkgs.zstd
             pkgs.gettext
             pkgs.libossp_uuid
+            pkgs.liburing
+            pkgs.numactl
             pkgs.libxslt
             pkgs.libxml2
             pkgs.docbook-xsl-nons
