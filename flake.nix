@@ -24,7 +24,8 @@
           };
         };
         scws = pkgs.callPackage ./derivations/scws.nix { };
-        oraclient = pkgs.callPackage ./derivations/oraclient.nix { };
+        oraclient = pkgs.lib.optionalAttrs (system != "loongarch64-linux" && system != "mips64el-linux") (pkgs.callPackage ./derivations/oraclient.nix { });
+        loongson-jdk = pkgs.lib.optionalAttrs (system == "loongarch64-linux") (pkgs.callPackage ./derivations/loongson-jdk.nix { });
       in
       {
         devShells.postgres = pkgs.mkShell {
@@ -77,16 +78,10 @@
             pkgs.protobufc
             pkgs.cunit
             pkgs.docbook5
-            # pgroonga
-            pkgs.groonga
-            pkgs.msgpack
             # mysql_fdw
             pkgs.libmysqlclient
             # zhparser
             scws
-            # oracle_fdw
-            oraclient
-            pkgs.libaio
             # pgcenter
             pkgs.go
             # patroni
@@ -104,7 +99,13 @@
             # postgis 可选库 gdal, dblatex 不支持 loongarch64 和 mips64el。
             pkgs.gdal
             pkgs.dblatex
-            # java tools
+            # oracle_fdw: oracle 不支持 loongarch64 和 mips64el。
+            oraclient
+            pkgs.libaio
+            # pgroonga: 依赖库 valgrind 不支持 loongarch64 和 mips64el。
+            pkgs.groonga
+            pkgs.msgpack
+            # java
             pkgs.openjdk
           ] ++ pkgs.lib.optionals (system != "mips64el-linux") [
             # mips64el 上 systemd 没有编译成功。
@@ -113,14 +114,18 @@
             pkgs.gtk2
             # imagemagick 依赖链中的 rustc 不支持 mips64el（error: missing bootstrap url for platform mips64el-unknown-linux-gnuabi64）
             pkgs.imagemagick
+            # frontend: nodejs 不支持 mips64el。
+            pkgs.nodejs
+          ] ++ pkgs.lib.optionals (system == "loongarch64-linux") [
+            loongson-jdk
           ];
 
           shellHook = ''
             export SCWS_HOME=${scws}
-            export ORACLE_HOME=${oraclient}
+            ${pkgs.lib.optionalString (system == "x86_64-linux" || system == "aarch64-linux") "export ORACLE_HOME=${oraclient}"}
             export LD_LIBRARY_PATH=${pkgs.libmysqlclient}/lib:$LD_LIBRARY_PATH
             export LD_LIBRARY_PATH=${scws}/lib:$LD_LIBRARY_PATH
-            export LD_LIBRARY_PATH=${oraclient}:$LD_LIBRARY_PATH
+            ${pkgs.lib.optionalString (system == "x86_64-linux" || system == "aarch64-linux") "export LD_LIBRARY_PATH=${oraclient}:$LD_LIBRARY_PATH"}
             export LD_LIBRARY_PATH=${pkgs.libaio}/lib:$LD_LIBRARY_PATH
             export GOPROXY=https://mirrors.aliyun.com/goproxy/
           '';

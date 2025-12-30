@@ -10,7 +10,7 @@ stdenv.mkDerivation rec {
     else if stdenv.hostPlatform.isAarch64 then 
       "arm64"
     else
-      throw "Unsupported architecture: ${stdenv.hostPlatform.system}";
+      throw "Unsupported system: ${stdenv.hostPlatform.system}";
 
   basicSrc = fetchurl {
     url = "https://download.oracle.com/otn_software/linux/instantclient/${intver}/instantclient-basic-linux.${arch}-${version}.zip";
