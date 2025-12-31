@@ -3,6 +3,7 @@
 stdenv.mkDerivation rec {
   pname = "scws";
   version = "1.2.3";
+  name = "${pname}-${version}";
 
   src = fetchurl {
     url = "http://www.xunsearch.com/scws/down/scws-${version}.tar.bz2";

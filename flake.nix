@@ -5,13 +5,18 @@
   inputs = {
     # 2025-05-24: tag 25.05
     nixpkgs-nix.url = "github:NixOS/nixpkgs/11cb3517b3af6af300dd6c055aeda73c9bf52c48";
-    # 2025-08-12: loong-master 分支最新 commit
-    nixpkgs-loong.url = "github:loongson-community/nixpkgs/64275dcdf675155d24d08ba72e1382c1ffe38c2b";
+    # 2025-12-11: 分支 loong-release-25.11 最新 commit
+    nixpkgs-loong.url = "github:loongson-community/nixpkgs/7b133b90e007e17a02c8f96f366e6f15049259b4";
+    # 2016-04-01: tag 16.03，该版本 nixpkgs 中的 glibc 版本为 2.23，是可以兼容 linux kernel 2.6.32 的最高版本。
+    nixpkgs-old = {
+      url = "github:NixOS/nixpkgs/d231868990f8b2d471648d76f07e747f396b9421";
+      flake = false;  # 这个版本没有 flake 支持
+    };
     # 2024-11-14: main 分支最新 commit
     flake-utils.url = "github:numtide/flake-utils/11707dc2f618dd54ca8739b309ec4fc024de578b";
   };
 
-  outputs = { self, nixpkgs-nix, nixpkgs-loong, flake-utils }:
+  outputs = { self, nixpkgs-nix, nixpkgs-loong, nixpkgs-old, flake-utils }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "loongarch64-linux" "mips64el-linux" ] (system:
       let
         mips64elLinuxOverlay = import ./overlays/mips64el-linux.nix;
@@ -23,8 +28,16 @@
             allowUnsupportedSystem = true;
           };
         };
+        pkgsOld = import nixpkgs-old { 
+          system = system;
+          config = {
+            allowBroken = true;
+          };
+        };
         scws = pkgs.callPackage ./derivations/scws.nix { };
+        scwsOld = pkgsOld.callPackage ./derivations/scws.nix { };
         oraclient = pkgs.lib.optionalAttrs (system != "loongarch64-linux" && system != "mips64el-linux") (pkgs.callPackage ./derivations/oraclient.nix { });
+        oraclientOld = pkgsOld.callPackage ./derivations/oraclient.nix { };
         loongson-jdk = pkgs.lib.optionalAttrs (system == "loongarch64-linux") (pkgs.callPackage ./derivations/loongson-jdk.nix { });
       in
       {
@@ -43,10 +56,11 @@
             pkgs.zlib
             pkgs.flex
             pkgs.bison
-            pkgs.python3
+            pkgs.python3  # plpython/patroni
             pkgs.perl
             pkgs.tcl
             pkgs.openssl
+            pkgs.curl
             pkgs.krb5
             pkgs.openldap
             pkgs.pam
@@ -84,8 +98,6 @@
             scws
             # pgcenter
             pkgs.go
-            # patroni
-            pkgs.python3
             # pgpool
             pkgs.flex
             pkgs.bison
@@ -110,9 +122,9 @@
           ] ++ pkgs.lib.optionals (system != "mips64el-linux") [
             # mips64el 上 systemd 没有编译成功。
             pkgs.systemd
-            # gtk2 依赖 systemd，所以在 mips64el 上不可用。
+            # postgis: gtk2 依赖 systemd，所以在 mips64el 上不可用。
             pkgs.gtk2
-            # imagemagick 依赖链中的 rustc 不支持 mips64el（error: missing bootstrap url for platform mips64el-unknown-linux-gnuabi64）
+            # postgis: imagemagick 依赖链中的 rustc 不支持 mips64el（error: missing bootstrap url for platform mips64el-unknown-linux-gnuabi64）
             pkgs.imagemagick
             # frontend: nodejs 不支持 mips64el。
             pkgs.nodejs
@@ -127,6 +139,105 @@
             export LD_LIBRARY_PATH=${scws}/lib:$LD_LIBRARY_PATH
             ${pkgs.lib.optionalString (system == "x86_64-linux" || system == "aarch64-linux") "export LD_LIBRARY_PATH=${oraclient}:$LD_LIBRARY_PATH"}
             export LD_LIBRARY_PATH=${pkgs.libaio}/lib:$LD_LIBRARY_PATH
+            export GOPROXY=https://mirrors.aliyun.com/goproxy/
+          '';
+        };
+
+        # nixpkgs 16.03 仅支持 x86_64 和 aarch64。
+        # nixpkgs 16.03 中没有 systemtap 包，所以该环境下不支持 --enable-dtrace 编译参数。
+        # x86_64 上 pg18 支持的 configure 参数：--enable-nls --with-perl --with-python --with-tcl --with-lz4 --with-gssapi --with-ldap --with-pam --with-systemd --with-uuid=ossp --with-libxml --with-libxslt --enable-debug --enable-cassert --enable-tap-tests --enable-depend --enable-coverage --enable-profiling --enable-injection-points
+        # x86_64 上 pg18 不支持的 configure 参数：--with-llvm --with-ssl=openssl --with-libcurl --with-zstd --with-liburing --with-libnuma --enable-dtrace
+        # aarch64 上 pg18 支持的 configure 参数：--enable-nls --with-perl --with-tcl --with-lz4 --with-gssapi --with-ldap --with-pam --with-uuid=ossp --with-libxml --with-libxslt --enable-debug --enable-cassert --enable-tap-tests --enable-depend --enable-coverage --enable-profiling --enable-injection-points
+        # aarch64 上 pg18 不支持的 configure 参数：--with-llvm --with-ssl=openssl --with-libcurl --with-zstd --with-liburing --with-libnuma --enable-dtrace --with-python --with-systemd
+        devShells.postgresOld = pkgsOld.stdenv.mkDerivation {
+          name = "postgres-old";
+          buildInputs = [
+            # general
+            pkgsOld.git
+            pkgsOld.autoconf
+            pkgsOld.automake
+            pkgsOld.libtool
+            pkgsOld.pkgconfig
+            pkgsOld.patchelf
+            # postgres
+            pkgsOld.readline
+            pkgsOld.zlib
+            pkgsOld.flex
+            pkgsOld.bison
+            pkgsOld.perl
+            pkgsOld.tcl
+            pkgsOld.openssl # 版本为 1.0.2g，低于 pg18 要求的 >= 1.1.1
+            pkgsOld.curl # 版本为 7.47.1，低于 pg18 要求的 >= 7.61.0
+            pkgsOld.libkrb5
+            pkgsOld.openldap
+            pkgsOld.pam
+            pkgsOld.lz4
+            pkgsOld.zstd # 版本为 0.5.1，低于 pg17 和 pg18 要求的 >= 1.4.0
+            pkgsOld.gettext
+            pkgsOld.libossp_uuid
+            # pkgsOld.liburing # missing
+            pkgsOld.numactl # configure 时找不到：$PKG_CONFIG --exists --print-errors "numa" Package numa was not found in the pkg-config search path. Perhaps you should add the directory containing `numa.pc' to the PKG_CONFIG_PATH environment variable
+            pkgsOld.llvm # 版本为 3.7.1，低于 pg17 要求的 >= 10 和 pg18 要求的 >= 14
+            pkgsOld.clang
+            pkgsOld.libxslt
+            pkgsOld.libxml2
+            pkgsOld.docbook_xsl
+            pkgsOld.docbook_xml_dtd_45
+            pkgsOld.icu
+            pkgsOld.libselinux
+            pkgsOld.lcov
+            pkgsOld.perlPackages.IPCRun
+            pkgsOld.perlPackages.TestMore
+            pkgsOld.perlPackages.DataDumper
+            pkgsOld.perlPackages.TestSimple
+            # postgis
+            pkgsOld.proj
+            pkgsOld.geos
+            pkgsOld.json_c
+            # pkgsOld.sfcgal # missing
+            pkgsOld.pcre2
+            pkgsOld.protobufc
+            pkgsOld.cunit
+            pkgsOld.docbook5
+            # mysql_fdw
+            # pkgsOld.libmysqlclient # missing
+            # zhparser
+            scwsOld
+            # pgpool
+            pkgsOld.flex
+            pkgsOld.bison
+            pkgsOld.openssl
+            pkgsOld.openldap
+            pkgsOld.pam
+            # pgroonga
+            # pkgsOld.groonga # missing
+            # pkgsOld.msgpack # missing
+            # frontend
+            pkgsOld.nodejs
+            # oracle_fdw
+            oraclientOld # 安装后没有链接到 nix 的 glibc
+            pkgsOld.libaio
+          ] ++ pkgsOld.lib.optionals (system != "aarch64-linux") [
+            # postgis
+            pkgsOld.gdal # aarch64: error: unsupported system: aarch64-linux
+            pkgsOld.dblatex # aarch64: error: assertion '(((stdenv).isFreeBSD || (stdenv).isDarwin) || (stdenv).cc.isGNU)' failed
+            pkgsOld.gtk2 # aarch64: error: assertion '(((stdenv).isFreeBSD || (stdenv).isDarwin) || (stdenv).cc.isGNU)' failed
+            pkgsOld.imagemagick # aarch64: error: ImageMagick is not supported on this platform.
+            pkgsOld.systemd # aarch64: error: assertion '(stdenv).isLinux' failed
+            # pgcenter
+            pkgsOld.go # aarch64: error: Unsupported system
+            # plpython/patroni
+            pkgsOld.python3 # aarch64: error: assertion '(((stdenv).isFreeBSD || (stdenv).isDarwin) || (stdenv).cc.isGNU)' failed
+            # java
+            pkgsOld.openjdk # aarch64: error: assertion '(((stdenv).isFreeBSD || (stdenv).isDarwin) || (stdenv).cc.isGNU)' failed
+          ];
+          
+          shellHook = ''
+            export SCWS_HOME=${scwsOld}
+            export ORACLE_HOME=${oraclientOld}
+            export LD_LIBRARY_PATH=${scwsOld}/lib:$LD_LIBRARY_PATH
+            export LD_LIBRARY_PATH=${oraclientOld}:$LD_LIBRARY_PATH
+            export LD_LIBRARY_PATH=${pkgsOld.libaio}/lib:$LD_LIBRARY_PATH
             export GOPROXY=https://mirrors.aliyun.com/goproxy/
           '';
         };
