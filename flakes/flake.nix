@@ -4,26 +4,30 @@
   # 如修改 nixpkgs-*.url 相关值后请同步更新 Dockerfile 中的 registry 步骤的值。
   inputs = {
     # 2025-05-24: tag 25.05
-    nixpkgs-nix.url = "github:NixOS/nixpkgs/11cb3517b3af6af300dd6c055aeda73c9bf52c48";
+    nixpkgs-nix.url = "https://ghfast.top/https://github.com/NixOS/nixpkgs/archive/11cb3517b3af6af300dd6c055aeda73c9bf52c48.tar.gz";
     # 2025-12-11: 分支 loong-release-25.11 最新 commit
-    nixpkgs-loong.url = "github:loongson-community/nixpkgs/7b133b90e007e17a02c8f96f366e6f15049259b4";
+    nixpkgs-loong.url = "https://ghfast.top/https://github.com/loongson-community/nixpkgs/archive/7b133b90e007e17a02c8f96f366e6f15049259b4.tar.gz";
     # 2016-04-01: tag 16.03，该版本 nixpkgs 中的 glibc 版本为 2.23，是可以兼容 linux kernel 2.6.32 的最高版本。
     nixpkgs-old = {
-      url = "github:NixOS/nixpkgs/d231868990f8b2d471648d76f07e747f396b9421";
+      url = "https://ghfast.top/https://github.com/NixOS/nixpkgs/archive/d231868990f8b2d471648d76f07e747f396b9421.tar.gz";
       flake = false;  # 这个版本没有 flake 支持
     };
     # 2024-11-14: main 分支最新 commit
-    flake-utils.url = "github:numtide/flake-utils/11707dc2f618dd54ca8739b309ec4fc024de578b";
+    flake-utils.url = "https://ghfast.top/https://github.com/numtide/flake-utils/archive/11707dc2f618dd54ca8739b309ec4fc024de578b.tar.gz";
   };
 
-  outputs = { self, nixpkgs-nix, nixpkgs-loong, nixpkgs-old, flake-utils }:
+  outputs = { self, nixpkgs-nix, nixpkgs-loong, nixpkgs-old, flake-utils}:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "loongarch64-linux" "mips64el-linux" ] (system:
       let
         mips64elLinuxOverlay = import ./overlays/mips64el-linux.nix;
+        loongarch64LinuxOverlay = import ./overlays/loongarch64-linux.nix;
         pkgs = import ( if system == "loongarch64-linux" then nixpkgs-loong else nixpkgs-nix ) { 
           # mips64el-linux 上编译 xgcc 时会错误的使用 32 位的头文件，为了避免这类问题，明确为该平台指定 abi 为 64 位。
           system = if system == "mips64el-linux" then "mips64el-linux-gnuabi64" else system;
-          overlays = if system == "mips64el-linux" then [ mips64elLinuxOverlay ] else [ ];
+          overlays =
+            if system == "mips64el-linux" then [ mips64elLinuxOverlay ]
+            else if system == "loongarch64-linux" then [ loongarch64LinuxOverlay ]
+            else [ ];
           config = {
             allowUnsupportedSystem = true;
           };

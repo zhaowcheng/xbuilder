@@ -1,0 +1,50 @@
+FROM m.daocloud.io/docker.io/library/debian:bookworm
+
+# 设置 nix 命令路径，由于 docker build 是用 bash -c 的方式执行命令会找不到这些命令。
+ENV PATH=/nix/var/nix/profiles/default/bin:$PATH
+
+# 后续步骤默认 shell 为 bash。
+SHELL ["/bin/bash", "-c"]
+
+# 更换为国内镜像源
+RUN cd /etc/apt/sources.list.d/ && \
+    echo "Types: deb" > debian.sources && \
+    echo "URIs: http://mirrors.aliyun.com/debian" >> debian.sources && \
+    echo "Suites: bookworm bookworm-updates" >> debian.sources && \
+    echo "Components: main" >> debian.sources && \
+    echo "Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg" >> debian.sources
+
+# 安装常用包
+RUN apt update
+RUN apt install -y sudo wget vim curl ssh-client
+
+# 不保留下载包等临时内容。
+WORKDIR /tmp
+
+# 下载并安装 nix 2.28.3。
+RUN wget https://ghfast.top/https://github.com/DeterminateSystems/nix-installer/releases/download/v3.5.2/nix-installer-x86_64-linux -O nix-installer && \
+    chmod +x nix-installer && \
+    ./nix-installer install linux --init none --no-confirm --extra-conf "filter-syscalls = false" && \
+    rm -f nix-installer
+## 更换 nix 二进制缓存源。
+COPY keys/nix-serve/public.key nixcache_pub.key
+RUN echo "substituters = http://nixcache https://cache.nix4loong.cn https://mirror.sjtu.edu.cn/nix-channels/store https://cache.nixos.org https://nix-community.cachix.org" >> /etc/nix/nix.custom.conf
+RUN echo "trusted-public-keys = $(cat nixcache_pub.key) cache.nix4loong.cn-1:zmkwLihdSUyy6OFSVgvK3br0EaUEczLiJgDfvOmm3pA= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" >> /etc/nix/nix.custom.conf
+## 增加额外支持的平台。
+RUN echo "extra-platforms = aarch64-linux loongarch64-linux mips64el-linux" >> /etc/nix/nix.custom.conf
+## 增加 loongarch64 支持。
+RUN echo "extra-system-features = gccarch-la64v1.0 gccarch-loongarch64" >> /etc/nix/nix.custom.conf
+## 锁定 nixpkgs 版本，请与 flake.nix 中的 nixpkgs-nix 版本保持一致。
+RUN nix registry add --registry /etc/nix/registry.json nixpkgs "https://ghfast.top/https://github.com/NixOS/nixpkgs/archive/11cb3517b3af6af300dd6c055aeda73c9bf52c48.tar.gz"
+
+# 构建编译环境。
+COPY flakes/ /root/flakes/
+RUN nix build /root/flakes/#devShells.x86_64-linux.postgres
+RUN nix build /root/flakes/#devShells.aarch64-linux.postgres
+RUN nix build /root/flakes/#devShells.loongarch64-linux.postgres
+RUN nix build /root/flakes/#devShells.mips64el-linux.postgres
+
+WORKDIR /root
+
+# 设置容器默认启动命令。
+CMD ["/bin/bash", "-c", "nix-daemon"]
