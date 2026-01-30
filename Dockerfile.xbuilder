@@ -34,15 +34,13 @@ RUN echo "trusted-public-keys = $(cat nixcache_pub.key) cache.nix4loong.cn-1:zmk
 RUN echo "extra-platforms = aarch64-linux loongarch64-linux mips64el-linux" >> /etc/nix/nix.custom.conf
 ## 增加 loongarch64 支持。
 RUN echo "extra-system-features = gccarch-la64v1.0 gccarch-loongarch64" >> /etc/nix/nix.custom.conf
-## 锁定 nixpkgs 版本，请与 flake.nix 中的 nixpkgs-nix 版本保持一致。
-RUN nix registry add --registry /etc/nix/registry.json nixpkgs "https://ghfast.top/https://github.com/NixOS/nixpkgs/archive/11cb3517b3af6af300dd6c055aeda73c9bf52c48.tar.gz"
 
 # 构建编译环境。
 COPY flakes/ /root/flakes/
-RUN nix build /root/flakes/#devShells.x86_64-linux.postgres
-RUN nix build /root/flakes/#devShells.aarch64-linux.postgres
-RUN nix build /root/flakes/#devShells.loongarch64-linux.postgres
-RUN nix build /root/flakes/#devShells.mips64el-linux.postgres
+RUN nix develop /root/flakes/#devShells.x86_64-linux.postgres -c uname -m
+RUN nix develop /root/flakes/#devShells.aarch64-linux.postgres -c uname -m
+RUN nix develop /root/flakes/#devShells.loongarch64-linux.postgres -c uname -m
+RUN nix develop /root/flakes/#devShells.mips64el-linux.postgres -c uname -m
 
 WORKDIR /root
 
