@@ -16,7 +16,7 @@ RUN cd /etc/apt/sources.list.d/ && \
 
 # 安装常用包
 RUN apt update
-RUN apt install -y sudo wget vim curl ssh-client
+RUN apt install -y sudo wget vim curl ssh-client git
 
 # 不保留下载包等临时内容。
 WORKDIR /tmp
@@ -26,14 +26,16 @@ RUN wget https://ghfast.top/https://github.com/DeterminateSystems/nix-installer/
     chmod +x nix-installer && \
     ./nix-installer install linux --init none --no-confirm --extra-conf "filter-syscalls = false" && \
     rm -f nix-installer
-## 更换 nix 二进制缓存源。
+# 更换 nix 二进制缓存源。
 COPY keys/nix-serve/public.key nixcache_pub.key
 RUN echo "substituters = http://nixcache https://cache.nix4loong.cn https://mirror.sjtu.edu.cn/nix-channels/store https://cache.nixos.org https://nix-community.cachix.org" >> /etc/nix/nix.custom.conf
 RUN echo "trusted-public-keys = $(cat nixcache_pub.key) cache.nix4loong.cn-1:zmkwLihdSUyy6OFSVgvK3br0EaUEczLiJgDfvOmm3pA= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" >> /etc/nix/nix.custom.conf
-## 增加额外支持的平台。
+# 增加额外支持的平台。
 RUN echo "extra-platforms = aarch64-linux loongarch64-linux mips64el-linux" >> /etc/nix/nix.custom.conf
-## 增加 loongarch64 支持。
+# 增加 loongarch64 支持。
 RUN echo "extra-system-features = gccarch-la64v1.0 gccarch-loongarch64" >> /etc/nix/nix.custom.conf
+# 设置 tarball 缓存有效期为 100 年，对于 nixpkgs 和 flake-registry 均有效。
+RUN echo "tarball-ttl = 3155673600" >> /etc/nix/nix.custom.conf
 
 # 构建编译环境。
 COPY flakes/ /root/flakes/

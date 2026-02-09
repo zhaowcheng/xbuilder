@@ -49,7 +49,6 @@
           name = "postgres";
           buildInputs = [
             # general
-            pkgs.git
             pkgs.autoconf
             pkgs.automake
             pkgs.libtool
@@ -157,7 +156,6 @@
           name = "postgres-old";
           buildInputs = [
             # general
-            pkgsOld.git
             pkgsOld.autoconf
             pkgsOld.automake
             pkgsOld.libtool
@@ -244,6 +242,18 @@
             export LD_LIBRARY_PATH=${pkgsOld.libaio}/lib:$LD_LIBRARY_PATH
             export GOPROXY=https://mirrors.aliyun.com/goproxy/
           '';
+        };
+
+        devShells.patchelf = pkgs.stdenv.mkDerivation {
+          name = "patchelf";
+          buildInputs = [
+            pkgs.autoconf
+            pkgs.automake
+          ];
+
+          # 静态编译
+          CFLAGS = "-static";
+          LDFLAGS = "-static";
         };
       }
     );
