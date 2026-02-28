@@ -138,6 +138,7 @@
           shellHook = ''
             export SCWS_HOME=${scws}
             ${pkgs.lib.optionalString (system == "x86_64-linux" || system == "aarch64-linux") "export ORACLE_HOME=${oraclient}"}
+            export MYSQL_HOME=${pkgs.libmysqlclient}
             export LD_LIBRARY_PATH=${pkgs.libmysqlclient}/lib:$LD_LIBRARY_PATH
             export LD_LIBRARY_PATH=${scws}/lib:$LD_LIBRARY_PATH
             ${pkgs.lib.optionalString (system == "x86_64-linux" || system == "aarch64-linux") "export LD_LIBRARY_PATH=${oraclient}:$LD_LIBRARY_PATH"}
